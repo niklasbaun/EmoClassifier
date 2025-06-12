@@ -1,5 +1,7 @@
 import pandas as pd
-import numpy as np
+import nltk
+from nltk.corpus import stopwords
+from nltk.stem import PorterStemmer
 
 
 """
@@ -24,17 +26,27 @@ def load_data(file_path):
 Preprocess the data by handling missing values and normalizing numerical features.
 
 Parameters:
-data (pd.DataFrame): The input DataFrame to preprocess.
+text (list of only text arguments): The only the text from the data.
 
 Returns:
-pd.DataFrame: The preprocessed DataFrame.
+list of text (lower, stemmed).
 """
 def preprocess_data(data):
-    # Handle missing values
-    data.fillna(data.mean(), inplace=True)
+    text = data['text'].tolist()
+    #lowercase the text
+    text = [t.lower() for t in text]
 
-    # Normalize numerical features
-    numerical_cols = data.select_dtypes(include=[np.number]).columns
-    data[numerical_cols] = (data[numerical_cols] - data[numerical_cols].mean()) / data[numerical_cols].std()
+    #remove punctuation and special characters
+    text = [t.replace('.', '').replace(',', '').replace('!', '').replace('?', '') for t in text]
 
+    #remove stop words
+    nltk.download('stopwords')
+    stop_words = set(stopwords.words('english'))
+    text = [' '.join([word for word in t.split() if word not in stop_words]) for t in text]
+    #stem
+    stemmer = PorterStemmer()
+    text = [' '.join([stemmer.stem(word) for word in t.split()]) for t in text]
+
+    #update
+    data['text'] = text
     return data
