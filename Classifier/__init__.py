@@ -1,12 +1,15 @@
 import pandas as pd
+import numpy as np
+import torch
 from transformers import BertTokenizer
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
-from transformers import AdamW
+import torch.nn as nn
+from torch.optim import AdamW
 from sklearn.metrics import accuracy_score
 from collections import defaultdict
-import EmoDataset
-import EmoClassifier
+from EmoDataset import EmoDataset
+from EmoClassifier import EmoClassifier
 
 
 df = pd.read_csv('../track-a.csv')
@@ -52,14 +55,14 @@ val_data_loader = DataLoader(
 
 #model
 # Initialize model
-model = EmotionClassifier(n_classes=len(emotion_columns))
-model = model.to(CUDA)
+model = EmoClassifier(n_classes=len(emotion_columns))
+model = model.to(device) #TODO set device (cpu/gpu)
 
 
 #train
 EPOCHS = 3
-optimizer = AdamW(model.parameters(), lr=2e-5)
-loss_fn = nn.BCEWithLogitsLoss().to(device)
+optimizer = AdamW(model.parameters(), lr=2e-5, weight_decay=1e-5)
+loss_fn = torch.nn.BCEWithLogitsLoss().to(device) #TODO set device (cpu/gpu)
 
 def train_epoch(model, data_loader, loss_fn, optimizer, device, n_examples):
     model = model.train()
@@ -89,6 +92,10 @@ def train_epoch(model, data_loader, loss_fn, optimizer, device, n_examples):
 
     return correct_predictions.double() / n_examples, np.mean(losses)
 
+
+"""
+Way to evaluate the model
+"""
 def eval_model(model, data_loader, loss_fn, device, n_examples):
     model = model.eval()
     losses = []
@@ -126,8 +133,8 @@ for epoch in range(EPOCHS):
         train_data_loader,
         loss_fn,
         optimizer,
-        device,
-        len(train_df)
+        device, #TODO set device (cpu/gpu)
+        len(train_df))
 
     print(f'Train loss {train_loss} accuracy {train_acc}')
 
@@ -135,11 +142,10 @@ for epoch in range(EPOCHS):
         model,
         val_data_loader,
         loss_fn,
-        device,
+        device,     #TODO set device (cpu/gpu)
         len(val_df))
 
     print(f'Val loss {val_loss} accuracy {val_acc}')
-    print()
 
     history['train_acc'].append(train_acc)
     history['train_loss'].append(train_loss)
