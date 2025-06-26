@@ -8,6 +8,10 @@ from transformers import BertTokenizer
 from torch.utils.data import DataLoader
 from Classifier.EmoDataset import EmoDataset
 from Classifier.EmoClassifier import EmoClassifier
+from Classifier.Trainer import train
+
+
+
 
 """
 make prediction for input csv file
@@ -19,24 +23,28 @@ def predict(input_csv):
     # Load the input CSV file
     df = pd.read_csv(input_csv)
 
-    #get text column
+    # get text column
     if 'text' not in df.columns:
         raise ValueError("Input CSV must contain a 'text' column.")
 
     #load the model state
     model_state = torch.load('best_model_state.bin', map_location=torch.device('cpu'))
     # Initialize the tokenizer
-    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+    tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
     MAX_LEN = 128
 
     # Create the dataset
     dataset = EmoDataset(
         texts=df['text'].values,
-        #Dummy labels, as we are only predicting
+        # Dummy labels, as we are only predicting
         labels=np.zeros((len(df), 5)),
         tokenizer=tokenizer,
         max_len=MAX_LEN
     )
+
+    print("Dataset created with {} samples.".format(len(dataset)))
+    for i in range(5):
+        print(f"Sample {i}: {dataset[i]['text']}")
     # Create the DataLoader
     BATCH_SIZE = 16
     data_loader = DataLoader(
@@ -74,17 +82,16 @@ def predict(input_csv):
     predictions_df.rename(columns={col: f'predicted_{col}' for col in emotion_columns}, inplace=True)
 
     # Ensure the DataFrame has the correct columns
-    expected_columns =[f'predicted_{col}' for col in emotion_columns]
+    expected_columns = [f'predicted_{col}' for col in emotion_columns]
     for col in expected_columns:
         if col not in predictions_df.columns:
             predictions_df[col] = np.nan
     predictions_df = predictions_df[expected_columns]
 
-    #convert predicitions to binary
+    # convert predicitions to binary
     predictions_df = (predictions_df > 0.5).astype(int)
 
     return predictions_df
-
 
 
 if __name__ == "__main__":
@@ -93,16 +100,23 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Predict emotions from text data in a CSV file.")
     parser.add_argument('input_csv', type=str, help='Path to the input CSV file containing text data.')
 
+    #check if model file exists
+    if not os.path.exists('best_model_state.bin'):
+        #train the model first
+        print("Model file 'best_model_state.bin' not found. Starting training...")
+        train()
+    else:
+        print("Model file 'best_model_state.bin' already exists. Skipping training.")
+
     args = parser.parse_args()
 
     start_time = time.time()
+
+    # here is the output do whatever you want with it
     predictions = predict(args.input_csv)
     end_time = time.time()
 
     print("Predictions:")
-    print(predictions.head())
+    print(predictions)
 
     print(f"Prediction completed in {end_time - start_time:.2f} seconds.")
-
-
-

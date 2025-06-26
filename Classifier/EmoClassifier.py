@@ -1,6 +1,7 @@
 import torch.nn as nn
 from transformers import BertModel
 
+
 class EmoClassifier(nn.Module):
     def __init__(self, n_classes):
         super(EmoClassifier, self).__init__()

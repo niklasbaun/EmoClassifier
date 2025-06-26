@@ -7,26 +7,25 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 from torch.optim import AdamW
 from collections import defaultdict
-from EmoDataset import EmoDataset
-from EmoClassifier import EmoClassifier
+from Classifier.EmoDataset import EmoDataset
+from Classifier.EmoClassifier import EmoClassifier
 
 
-df = pd.read_csv('../track-a.csv')
-
-#set labels
+df = pd.read_csv('../EmoClassifier/track-a.csv')
+print(torch.cuda.is_available())
+# set labels
 emotion_columns = ['anger', 'fear', 'joy', 'sadness', 'surprise']
 df['label'] = df[emotion_columns].values.tolist()
-print(df.head())
 
 
-#split
+# split
 train_df, val_df = train_test_split(df, test_size=0.2, random_state=42)
 
-#tokenizer
-tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+# tokenizer
+tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
 MAX_LEN = 128
 
-#dataset
+# dataset
 train_dataset = EmoDataset(
     texts=train_df.text.values,
     labels=train_df.label.values,
@@ -40,7 +39,7 @@ val_dataset = EmoDataset(
     max_len=MAX_LEN
 )
 
-#dataloader
+# dataloader
 BATCH_SIZE = 16
 
 train_data_loader = DataLoader(
@@ -61,7 +60,7 @@ model = model.to(device)
 
 
 """ Set training parameters"""
-EPOCHS = 3
+EPOCHS = 10
 optimizer = AdamW(model.parameters(), lr=2e-5, weight_decay=1e-5)
 loss_fn = torch.nn.BCEWithLogitsLoss().to(device)
 
@@ -133,11 +132,11 @@ def eval_model(model, data_loader, loss_fn, device, n_examples):
 
             loss = loss_fn(outputs, labels)
 
-            preds = (torch.sigmoid(outputs) > 0.5).cpu().numpy()
+            preds = (torch.sigmoid(outputs) > 0.5)
             all_preds.append(preds)
             all_labels.append(labels.cpu().numpy())
 
-            correct_predictions += torch.sum(preds == labels.cpu().numpy())
+            correct_predictions += torch.sum(preds == labels)
             losses.append(loss.item())
 
     all_preds = np.vstack(all_preds)
@@ -149,44 +148,47 @@ def eval_model(model, data_loader, loss_fn, device, n_examples):
 
 
 """ Main training loop"""
-history = defaultdict(list)
-best_accuracy = 0
 
-# Train the model for a specified number of epochs
-for epoch in range(EPOCHS):
-    print(f'Epoch {epoch + 1}/{EPOCHS}')
-    print('-' * 10)
+def train():
+    history = defaultdict(list)
+    best_accuracy = 0
     print(f"Training on {len(train_df)} samples, validating on {len(val_df)} samples")
-    train_acc, train_loss = train_epoch(
-        model,
-        train_data_loader,
-        loss_fn,
-        optimizer,
-        device,
-        len(train_df))
+    # Train the model for a specified number of epochs
+    for epoch in range(EPOCHS):
+        print(f'Epoch {epoch + 1}/{EPOCHS}')
+        print('-' * 10)
 
-    print(f"Training")
-    print(f'Train loss {train_loss} accuracy {train_acc}')
+        train_acc, train_loss = train_epoch(
+            model,
+            train_data_loader,
+            loss_fn,
+            optimizer,
+            device,
+            len(train_df))
 
-    val_acc, val_loss, val_f1, val_hamming = eval_model(
-        model,
-        val_data_loader,
-        loss_fn,
-        device,
-        len(val_df))
+        print(f"Training")
+        print(f'Train loss {train_loss} accuracy {train_acc}')
 
-    print(f"Validation")
-    print(f'Val loss {val_loss} accuracy {val_acc}')
-    print(f'Val F1 {val_f1} Hamming Loss {val_hamming}')
+        val_acc, val_loss, val_f1, val_hamming = eval_model(
+            model,
+            val_data_loader,
+            loss_fn,
+            device,
+            len(val_df))
 
-    history['train_acc'].append(train_acc)
-    history['train_loss'].append(train_loss)
-    history['val_acc'].append(val_acc)
-    history['val_loss'].append(val_loss)
-    history['val_f1'].append(val_f1)
-    history['val_hamming'].append(val_hamming)
+        print(f"Validation")
+        print(f'Val loss {val_loss} accuracy {val_acc}')
+        print(f'Val F1 {val_f1} Hamming Loss {val_hamming}')
 
-    #Save the model if validation accuracy improves
-    if val_acc > best_accuracy:
-        torch.save(model.state_dict(), 'best_model_state.bin')
-    best_accuracy = val_acc
+        history['train_acc'].append(train_acc)
+        history['train_loss'].append(train_loss)
+        history['val_acc'].append(val_acc)
+        history['val_loss'].append(val_loss)
+        history['val_f1'].append(val_f1)
+        history['val_hamming'].append(val_hamming)
+
+        # Save the model if validation accuracy improves
+        if val_acc > best_accuracy:
+            torch.save(model.state_dict(), 'best_model_state.bin')
+        best_accuracy = val_acc
+
