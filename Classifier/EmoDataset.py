@@ -1,5 +1,5 @@
 from torch.utils.data import Dataset
-
+import torch
 class EmoDataset(Dataset):
     def __init__(self, texts, labels, tokenizer, max_len):
         self.texts = texts

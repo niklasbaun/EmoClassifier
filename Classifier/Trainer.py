@@ -1,12 +1,11 @@
 import pandas as pd
 import numpy as np
 import torch
+from sklearn.metrics import f1_score, hamming_loss
 from transformers import BertTokenizer
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
-import torch.nn as nn
 from torch.optim import AdamW
-from sklearn.metrics import accuracy_score
 from collections import defaultdict
 from EmoDataset import EmoDataset
 from EmoClassifier import EmoClassifier
@@ -17,7 +16,9 @@ df = pd.read_csv('../track-a.csv')
 #set labels
 emotion_columns = ['anger', 'fear', 'joy', 'sadness', 'surprise']
 df['label'] = df[emotion_columns].values.tolist()
-#
+print(df.head())
+
+
 #split
 train_df, val_df = train_test_split(df, test_size=0.2, random_state=42)
 
@@ -53,17 +54,27 @@ val_data_loader = DataLoader(
     batch_size=BATCH_SIZE
 )
 
-#model
-# Initialize model
+""" Initialize the model"""
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = EmoClassifier(n_classes=len(emotion_columns))
-model = model.to(device) #TODO set device (cpu/gpu)
+model = model.to(device)
 
 
-#train
+""" Set training parameters"""
 EPOCHS = 3
 optimizer = AdamW(model.parameters(), lr=2e-5, weight_decay=1e-5)
-loss_fn = torch.nn.BCEWithLogitsLoss().to(device) #TODO set device (cpu/gpu)
+loss_fn = torch.nn.BCEWithLogitsLoss().to(device)
 
+"""
+function  of what is done in each epoch
+Args:
+    model: The model to train
+    data_loader: DataLoader for the training set
+    loss_fn: Loss function used for training
+    optimizer: Optimizer for updating model weights
+    device: Device to run the model on (CPU or GPU)
+    n_examples: Number of examples in the training set
+"""
 def train_epoch(model, data_loader, loss_fn, optimizer, device, n_examples):
     model = model.train()
     losses = []
@@ -94,12 +105,20 @@ def train_epoch(model, data_loader, loss_fn, optimizer, device, n_examples):
 
 
 """
-Way to evaluate the model
+helper function to evaluate the model on the validation set
+Args:
+    model: The trained model to evaluate
+    data_loader: DataLoader for the validation set
+    loss_fn: Loss function used for evaluation
+    device: Device to run the model on (CPU or GPU)
+    n_examples: Number of examples in the validation set
 """
 def eval_model(model, data_loader, loss_fn, device, n_examples):
     model = model.eval()
     losses = []
     correct_predictions = 0
+    all_labels = []
+    all_preds = []
 
     with torch.no_grad():
         for d in data_loader:
@@ -114,44 +133,60 @@ def eval_model(model, data_loader, loss_fn, device, n_examples):
 
             loss = loss_fn(outputs, labels)
 
-            preds = torch.sigmoid(outputs) > 0.5
-            correct_predictions += torch.sum(preds == labels.byte())
+            preds = (torch.sigmoid(outputs) > 0.5).cpu().numpy()
+            all_preds.append(preds)
+            all_labels.append(labels.cpu().numpy())
+
+            correct_predictions += torch.sum(preds == labels.cpu().numpy())
             losses.append(loss.item())
 
-    return correct_predictions.double() / n_examples, np.mean(losses)
+    all_preds = np.vstack(all_preds)
+    all_labels = np.vstack(all_labels)
+    f1 = f1_score(all_labels, all_preds, average="macro")
+    hamming = hamming_loss(all_labels, all_preds)
 
-#loop
+    return correct_predictions.double() / n_examples, np.mean(losses), f1, hamming
+
+
+""" Main training loop"""
 history = defaultdict(list)
 best_accuracy = 0
 
+# Train the model for a specified number of epochs
 for epoch in range(EPOCHS):
     print(f'Epoch {epoch + 1}/{EPOCHS}')
     print('-' * 10)
-
+    print(f"Training on {len(train_df)} samples, validating on {len(val_df)} samples")
     train_acc, train_loss = train_epoch(
         model,
         train_data_loader,
         loss_fn,
         optimizer,
-        device, #TODO set device (cpu/gpu)
+        device,
         len(train_df))
 
+    print(f"Training")
     print(f'Train loss {train_loss} accuracy {train_acc}')
 
-    val_acc, val_loss = eval_model(
+    val_acc, val_loss, val_f1, val_hamming = eval_model(
         model,
         val_data_loader,
         loss_fn,
-        device,     #TODO set device (cpu/gpu)
+        device,
         len(val_df))
 
+    print(f"Validation")
     print(f'Val loss {val_loss} accuracy {val_acc}')
+    print(f'Val F1 {val_f1} Hamming Loss {val_hamming}')
 
     history['train_acc'].append(train_acc)
     history['train_loss'].append(train_loss)
     history['val_acc'].append(val_acc)
     history['val_loss'].append(val_loss)
+    history['val_f1'].append(val_f1)
+    history['val_hamming'].append(val_hamming)
 
+    #Save the model if validation accuracy improves
     if val_acc > best_accuracy:
         torch.save(model.state_dict(), 'best_model_state.bin')
     best_accuracy = val_acc
