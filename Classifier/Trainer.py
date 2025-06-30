@@ -191,4 +191,3 @@ def train():
         if val_acc > best_accuracy:
             torch.save(model.state_dict(), 'best_model_state.bin')
         best_accuracy = val_acc
-

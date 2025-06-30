@@ -2,6 +2,15 @@ from torch.utils.data import Dataset
 import torch
 
 
+"""
+Custom Class
+Dataset for emotion classification.
+Args:
+    - texts (list): List of text samples.
+    - labels (list): List of labels corresponding to the text samples.
+    - tokenizer (transformers.PreTrainedTokenizer): Tokenizer for encoding text.
+    - max_len (int): Maximum length for tokenized sequences.
+"""
 class EmoDataset(Dataset):
     def __init__(self, texts, labels, tokenizer, max_len):
         self.texts = texts
