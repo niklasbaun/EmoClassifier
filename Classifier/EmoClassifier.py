@@ -1,7 +1,12 @@
 import torch.nn as nn
 from transformers import BertModel
 
-
+"""
+Classifier class for emotion classification using BERT.
+initializes the BERT model, dropout layer, and output layer.
+Args:
+    n_classes (int): Number of emotion classes for classification.
+"""
 class EmoClassifier(nn.Module):
     def __init__(self, n_classes):
         super(EmoClassifier, self).__init__()

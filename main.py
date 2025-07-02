@@ -93,7 +93,8 @@ def predict(input_csv):
 
     return predictions_df
 
-
+# used to run
+# can be changed the way its needed
 if __name__ == "__main__":
     import argparse
 

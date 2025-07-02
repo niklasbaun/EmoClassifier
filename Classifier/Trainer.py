@@ -10,9 +10,10 @@ from collections import defaultdict
 from Classifier.EmoDataset import EmoDataset
 from Classifier.EmoClassifier import EmoClassifier
 
-
+#load data
 df = pd.read_csv('../EmoClassifier/track-a.csv')
 print(torch.cuda.is_available())
+
 # set labels
 emotion_columns = ['anger', 'fear', 'joy', 'sadness', 'surprise']
 df['label'] = df[emotion_columns].values.tolist()
@@ -25,13 +26,14 @@ train_df, val_df = train_test_split(df, test_size=0.2, random_state=42)
 tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
 MAX_LEN = 128
 
-# dataset
+# training dataset
 train_dataset = EmoDataset(
     texts=train_df.text.values,
     labels=train_df.label.values,
     tokenizer=tokenizer,
     max_len=MAX_LEN
 )
+#validation dataset
 val_dataset = EmoDataset(
     texts=val_df.text.values,
     labels=val_df.label.values,
@@ -41,7 +43,7 @@ val_dataset = EmoDataset(
 
 # dataloader
 BATCH_SIZE = 16
-
+#train and validation dataloaders
 train_data_loader = DataLoader(
     train_dataset,
     batch_size=BATCH_SIZE,
@@ -79,11 +81,13 @@ def train_epoch(model, data_loader, loss_fn, optimizer, device, n_examples):
     losses = []
     correct_predictions = 0
 
+    # Iterate over the data loader
     for d in data_loader:
         input_ids = d["input_ids"].to(device)
         attention_mask = d["attention_mask"].to(device)
         labels = d["labels"].to(device)
 
+        # Forward pass
         outputs = model(
             input_ids=input_ids,
             attention_mask=attention_mask
@@ -91,6 +95,7 @@ def train_epoch(model, data_loader, loss_fn, optimizer, device, n_examples):
 
         loss = loss_fn(outputs, labels)
 
+        # Calculate predictions and accuracy
         preds = torch.sigmoid(outputs) > 0.5
         correct_predictions += torch.sum(preds == labels.byte())
 
@@ -119,6 +124,7 @@ def eval_model(model, data_loader, loss_fn, device, n_examples):
     all_labels = []
     all_preds = []
 
+    # Disable gradient calculation for evaluation
     with torch.no_grad():
         for d in data_loader:
             input_ids = d["input_ids"].to(device)
@@ -131,7 +137,7 @@ def eval_model(model, data_loader, loss_fn, device, n_examples):
             )
 
             loss = loss_fn(outputs, labels)
-
+            # Calculate predictions and accuracy
             preds = (torch.sigmoid(outputs) > 0.5)
             all_preds.append(preds)
             all_labels.append(labels.cpu().numpy())
@@ -139,6 +145,7 @@ def eval_model(model, data_loader, loss_fn, device, n_examples):
             correct_predictions += torch.sum(preds == labels)
             losses.append(loss.item())
 
+    # Concatenate all predictions and labels
     all_preds = np.vstack(all_preds)
     all_labels = np.vstack(all_labels)
     f1 = f1_score(all_labels, all_preds, average="macro")
@@ -147,7 +154,11 @@ def eval_model(model, data_loader, loss_fn, device, n_examples):
     return correct_predictions.double() / n_examples, np.mean(losses), f1, hamming
 
 
-""" Main training loop"""
+""" 
+Main training loop
+main method to train the model
+used in the main.py file if no model file is found
+"""
 
 def train():
     history = defaultdict(list)
@@ -158,6 +169,7 @@ def train():
         print(f'Epoch {epoch + 1}/{EPOCHS}')
         print('-' * 10)
 
+        # Train the model for one epoch
         train_acc, train_loss = train_epoch(
             model,
             train_data_loader,
@@ -169,6 +181,7 @@ def train():
         print(f"Training")
         print(f'Train loss {train_loss} accuracy {train_acc}')
 
+        # Evaluate the model on the validation set
         val_acc, val_loss, val_f1, val_hamming = eval_model(
             model,
             val_data_loader,
@@ -180,6 +193,7 @@ def train():
         print(f'Val loss {val_loss} accuracy {val_acc}')
         print(f'Val F1 {val_f1} Hamming Loss {val_hamming}')
 
+        # Store the results in history
         history['train_acc'].append(train_acc)
         history['train_loss'].append(train_loss)
         history['val_acc'].append(val_acc)
