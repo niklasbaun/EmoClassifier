@@ -101,7 +101,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Predict emotions from text data in a CSV file.")
     parser.add_argument('input_csv', type=str, help='Path to the input CSV file containing text data.')
 
-    #check if model file exists
+
+    """
+    !!!!!
+    This needs to exist, because i can't upload a model file.
+    It is too big.
+    """
     if not os.path.exists('best_model_state.bin'):
         #train the model first
         print("Model file 'best_model_state.bin' not found. Starting training...")
