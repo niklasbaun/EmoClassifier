@@ -125,4 +125,7 @@ if __name__ == "__main__":
     print("Predictions:")
     print(predictions)
 
+    #save predictions
+    predictions.to_csv('predictions.csv', index=False)
+    print("Predictions saved to 'predictions.csv'.")
     print(f"Prediction completed in {end_time - start_time:.2f} seconds.")
