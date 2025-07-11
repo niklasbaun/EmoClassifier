@@ -9,6 +9,7 @@ from torch.optim import AdamW
 from collections import defaultdict
 from Classifier.EmoDataset import EmoDataset
 from Classifier.EmoClassifier import EmoClassifier
+import matplotlib.pyplot as plt
 
 #load data
 df = pd.read_csv('../EmoClassifier/track-a.csv')
@@ -62,7 +63,7 @@ model = model.to(device)
 
 
 """ Set training parameters"""
-EPOCHS = 10
+EPOCHS = 25
 optimizer = AdamW(model.parameters(), lr=2e-5, weight_decay=1e-5)
 loss_fn = torch.nn.BCEWithLogitsLoss().to(device)
 
@@ -76,36 +77,32 @@ Args:
     device: Device to run the model on (CPU or GPU)
     n_examples: Number of examples in the training set
 """
+
+
 def train_epoch(model, data_loader, loss_fn, optimizer, device, n_examples):
     model = model.train()
     losses = []
-    correct_predictions = 0
+    correct_predictions = 0  # Will count FULLY correct samples
 
-    # Iterate over the data loader
     for d in data_loader:
         input_ids = d["input_ids"].to(device)
         attention_mask = d["attention_mask"].to(device)
         labels = d["labels"].to(device)
-
         # Forward pass
-        outputs = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask
-        )
-
+        outputs = model(input_ids=input_ids, attention_mask=attention_mask)
         loss = loss_fn(outputs, labels)
 
-        # Calculate predictions and accuracy
-        preds = torch.sigmoid(outputs) > 0.5
-        correct_predictions += torch.sum(preds == labels.byte())
+        # Get predictions
+        preds = (torch.sigmoid(outputs) > 0.5)
+        correct_predictions += ((preds == labels.bool()).all(dim=1).sum().item())
 
         losses.append(loss.item())
-
+        # Backward pass
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
-
-    return correct_predictions.double() / n_examples, np.mean(losses)
+    accuracy = correct_predictions / n_examples
+    return accuracy, np.mean(losses)
 
 
 """
@@ -121,37 +118,37 @@ def eval_model(model, data_loader, loss_fn, device, n_examples):
     model = model.eval()
     losses = []
     correct_predictions = 0
-    all_labels = []
-    all_preds = []
+    all_labels = []  # Keep as lists during collection
+    all_preds = []   # Keep as lists during collection
 
-    # Disable gradient calculation for evaluation
     with torch.no_grad():
         for d in data_loader:
             input_ids = d["input_ids"].to(device)
             attention_mask = d["attention_mask"].to(device)
             labels = d["labels"].to(device)
 
-            outputs = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask
-            )
-
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
             loss = loss_fn(outputs, labels)
-            # Calculate predictions and accuracy
-            preds = (torch.sigmoid(outputs) > 0.5)
-            all_preds.append(preds)
+
+            # Get binary predictions (multi-label)
+            preds = (torch.sigmoid(outputs) > 0.5).float()
+            all_preds.append(preds.cpu().numpy())
             all_labels.append(labels.cpu().numpy())
 
-            correct_predictions += torch.sum(preds == labels)
+            # Count ONLY samples where ALL labels match
+            correct_predictions += ((preds == labels).all(dim=1).sum().item())
             losses.append(loss.item())
 
-    # Concatenate all predictions and labels
-    all_preds = np.vstack(all_preds)
-    all_labels = np.vstack(all_labels)
+    all_preds = np.concatenate(all_preds)
+    all_labels = np.concatenate(all_labels)
+
+    # Metrics
     f1 = f1_score(all_labels, all_preds, average="macro")
     hamming = hamming_loss(all_labels, all_preds)
+    accuracy = correct_predictions / n_examples
+    loss = np.mean(losses)
 
-    return correct_predictions.double() / n_examples, np.mean(losses), f1, hamming
+    return accuracy, loss, f1, hamming
 
 
 """ 
@@ -204,4 +201,14 @@ def train():
         # Save the model if validation accuracy improves
         if val_acc > best_accuracy:
             torch.save(model.state_dict(), 'best_model_state.bin')
+            # print the epoch number and validation accuracy
+            print(f'Saving model at epoch {epoch + 1} with accuracy {val_acc}')
         best_accuracy = val_acc
+        plt.plot(history['train_loss'], label='Train Loss')
+        plt.plot(history['val_loss'], label='Val Loss')
+        plt.legend()
+        plt.show()
+
+    #save history to a csv file
+    history_df = pd.DataFrame(history)
+    history_df.to_csv('training_history.csv', index=False)

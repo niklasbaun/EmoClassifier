@@ -1,7 +1,6 @@
 import torch.nn as nn
 from transformers import BertModel
 
-
 """
 Custom Class
 Emotion Classifier using BERT.
